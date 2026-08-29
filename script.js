@@ -300,13 +300,14 @@ function closeMap() {
 function stripExt(path) {
   return path.replace(/\.[a-zA-Z0-9]+$/, '');
 }
-// Пробует по очереди разные расширения, пока картинка не загрузится
-function setImageWithFallback(imgEl, path) {
+// Пробует по очереди разные расширения, пока картинка не загрузится.
+// onFail (необязательно) — вызывается, если ни один формат не подошёл (например, показать заглушку).
+function setImageWithFallback(imgEl, path, onFail) {
   const base = stripExt(path);
   const exts = ['jpg', 'jpeg', 'png', 'webp', 'JPG', 'JPEG', 'PNG', 'WEBP'];
   let i = 0;
   function tryNext() {
-    if (i >= exts.length) return; // ни один формат не подошёл
+    if (i >= exts.length) { if (onFail) onFail(); return; } // ни один формат не подошёл
     imgEl.src = base + '.' + exts[i];
     i++;
   }
@@ -698,7 +699,7 @@ function buildMoments() {
     const tilt = (i % 2 === 0) ? '-3deg' : '3deg';
     d.style.setProperty('--tilt', tilt);
     d.innerHTML = `
-      <div class="moment-photo-wrap"><div class="moment-photo"><img src="${m.фото}" alt=""/></div></div>
+      <div class="moment-photo-wrap"><div class="moment-photo"><img alt=""/></div></div>
       <div class="moment-text">
         ${m.метка ? `<div class="moment-kicker">${m.метка}</div>` : ''}
         <div class="moment-title">${m.заголовок}</div>
@@ -706,6 +707,8 @@ function buildMoments() {
         ${m.факт ? `<div class="moment-fact"><b>Факт:</b> ${m.факт}</div>` : ''}
         ${m.история ? `<div class="moment-story">${m.история}</div>` : ''}
       </div>`;
+    const img = d.querySelector('img');
+    if (m.фото) setImageWithFallback(img, m.фото);
     row.appendChild(d);
   });
 }
@@ -720,10 +723,14 @@ function buildTrackCards(elementId, items) {
     d.innerHTML = `
       <div class="track-disc">
         <div class="track-disc-grooves"></div>
-        ${item.фото ? `<img src="${item.фото}" alt="${item.название}" onerror="this.style.display='none'"/>` : `<div class="track-disc-note">♪</div>`}
+        ${item.фото ? `<img alt="${item.название}"/>` : `<div class="track-disc-note">♪</div>`}
         <div class="track-disc-hole"></div>
       </div>
       <div class="track-name">${item.название}</div>`;
+    const img = d.querySelector('img');
+    if (img && item.фото) {
+      setImageWithFallback(img, item.фото, () => { img.style.display = 'none'; });
+    }
     if (item.ссылка) d.addEventListener('click', () => window.open(item.ссылка, '_blank'));
     row.appendChild(d);
   });
@@ -738,11 +745,18 @@ function buildRewatchCards(elementId, items) {
     d.className = 'rewatch-card' + (item.ссылка ? ' is-clickable' : '');
     d.innerHTML = `
       <div class="rewatch-ribbon">🎬 пересматриваем</div>
-      ${item.фото ? `<img src="${item.фото}" alt="${item.название}" onerror="this.style.background='linear-gradient(135deg,#1a0000,#B71C1C)';this.style.opacity='0.5';"/>` : `<div class="rewatch-noimg"></div>`}
+      ${item.фото ? `<img alt="${item.название}"/>` : `<div class="rewatch-noimg"></div>`}
       <div class="rewatch-overlay">
         ${item.рейтинг ? `<div class="rewatch-rating">★ ${item.рейтинг}</div>` : ''}
         <div class="rewatch-title">${item.название}</div>
       </div>`;
+    const img = d.querySelector('img');
+    if (img && item.фото) {
+      setImageWithFallback(img, item.фото, () => {
+        img.style.background = 'linear-gradient(135deg,#1a0000,#B71C1C)';
+        img.style.opacity = '0.5';
+      });
+    }
     if (item.ссылка) d.addEventListener('click', () => window.open(item.ссылка, '_blank'));
     row.appendChild(d);
   });
@@ -758,8 +772,15 @@ function buildPlaceCards(elementId, items) {
     d.style.setProperty('--tilt', (i % 2 === 0 ? '-2.5deg' : '2.5deg'));
     d.innerHTML = `
       <div class="place-pin">📍</div>
-      ${item.фото ? `<img src="${item.фото}" alt="${item.название}" onerror="this.style.background='linear-gradient(135deg,#1a0000,#B71C1C)';this.style.opacity='0.4';"/>` : `<div class="place-noimg"></div>`}
+      ${item.фото ? `<img alt="${item.название}"/>` : `<div class="place-noimg"></div>`}
       <div class="place-caption">${item.название}</div>`;
+    const img = d.querySelector('img');
+    if (img && item.фото) {
+      setImageWithFallback(img, item.фото, () => {
+        img.style.background = 'linear-gradient(135deg,#1a0000,#B71C1C)';
+        img.style.opacity = '0.4';
+      });
+    }
     if (item.ссылка) d.addEventListener('click', () => window.open(item.ссылка, '_blank'));
     row.appendChild(d);
   });
@@ -805,6 +826,8 @@ function playEp(i) {
   const v = document.getElementById('pl-video');
   v.pause();
   document.getElementById('pl-toast').classList.remove('show');
+  // Останавливаем фоновую музыку сразу, не дожидаясь конца анимации перехода
+  if (musicPlaying) toggleMusic();
   showEpIntro(i, () => {
     cur = i;
     const ep = eps[i];
@@ -819,8 +842,6 @@ function playEp(i) {
     document.getElementById('size-btn').textContent = '⊡ Свернуть';
     document.getElementById('browse').style.display = 'none';
     document.getElementById('player').classList.add('on');
-    // Останавливаем фоновую музыку на время видео
-    if (musicPlaying) toggleMusic();
     loadVideo(ep.vid);
   });
 }
@@ -968,6 +989,8 @@ function goBack() {
   document.getElementById('browse').style.display = 'block';
   isMini = false;
   stopVoice();
+  // Возобновляем фоновую музыку после выхода из эпизода
+  if (!musicPlaying) toggleMusic();
 }
 
 /* ═══ ESC ═══ */
